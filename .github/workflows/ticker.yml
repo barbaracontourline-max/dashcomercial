@@ -1,0 +1,23 @@
+name: Despertador (atualiza a cada ~15 min)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "7 * * * *"   # backup: 1x/hora tenta manter o despertador vivo
+
+concurrency:
+  group: ticker
+  cancel-in-progress: true
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar atualizacao do painel e reagendar
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "Falta o segredo DISPATCH_TOKEN"; exit 1; fi
+          gh workflow run atualizar.yml -R "${{ github.repository }}" --ref main || true
+          sleep 840   # ~14 min
+          gh workflow run ticker.yml -R "${{ github.repository }}" --ref main || true
