@@ -1,0 +1,44 @@
+name: Atualizar Painel Comercial
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # a cada ~15 min (o GitHub pode atrasar alguns minutos)
+  workflow_dispatch: {}        # botao "Run workflow" manual
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Gerar painel
+        env:
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+        run: python gerar_painel.py
+      - name: Montar site
+        run: |
+          mkdir -p site/Imagens
+          cp painel-comercial-prototipo.html site/index.html
+          cp Imagens/* site/Imagens/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
