@@ -397,7 +397,7 @@ eq_rows += (f'<div class="eqrow eqtot"><span class="nm">TOTAL</span>'
             f'<span class="r">{_tven/g_meta*100 if g_meta else 0:.1f}%</span></div>')
 
 hg_p = g_vend/g_meta*100 if g_meta else 0
-agora = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+agora = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-3))).strftime("%d/%m/%Y %H:%M")
 
 _fab_links = "".join(f'<a href="#lin{i}">{L["nome"]}</a>' for i,L in enumerate(lines))
 _ger_links = "".join(f'<a href="#ger{i}">{G["nome"]}</a>' for i,G in enumerate(gestores))
