@@ -210,7 +210,8 @@ for _r in range(3, _NG.max_row + 1):
         g_vend += _q; g_vqtd += 1
     else:
         g_ab += _q; g_abqtd += 1
-g_falta = g_meta - g_vend
+falta_real = g_meta - g_vend            # só o já liberado (OP)
+falta_proj = g_meta - g_vend - g_ab     # liberado + em aberto
 hero_equip = g_vqtd - consum_qtd
 
 # ---------- FICHAS ----------
@@ -398,6 +399,10 @@ eq_rows += (f'<div class="eqrow eqtot"><span class="nm">TOTAL</span>'
 
 hg_p = g_vend/g_meta*100 if g_meta else 0
 agora = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-3))).strftime("%d/%m/%Y %H:%M")
+if falta_proj > 0:
+    falta_top = f'<div class="v money">{br(falta_proj)}</div><div class="qty">já liberado + em aberto</div>'
+else:
+    falta_top = f'<div class="v money green">R$ 0,00</div><div class="qty" style="color:var(--green)">+ {br(-falta_proj)} acima (c/ em aberto)</div>'
 
 _fab_links = "".join(f'<a href="#lin{i}">{L["nome"]}</a>' for i,L in enumerate(lines))
 _ger_links = "".join(f'<a href="#ger{i}">{G["nome"]}</a>' for i,G in enumerate(gestores))
@@ -528,6 +533,8 @@ CSS = r"""<style>
   .eqtab .eqrow .pm{font-weight:700}
   @media(max-width:760px){.eqtab .eqrow{grid-template-columns:1fr 38px 100px 108px 52px;font-size:10.5px;gap:5px}}
   .note{font-size:12px;color:var(--muted);margin-top:24px;text-align:center;line-height:1.6}
+  .note2{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--muted);margin-top:24px}
+  .note2 b{color:var(--ink);font-size:14px;font-weight:700}
   @media(max-width:760px){.hero .topgrid{grid-template-columns:repeat(2,1fr)}.grid,.grid.g3{grid-template-columns:1fr}.fintable td .bs{display:block;margin-left:0}}
 </style>"""
 
@@ -549,7 +556,7 @@ html = f"""<!DOCTYPE html>
       <div><div class="label">Vendido (OP liberada)</div><div class="v green money">{br(g_vend)}</div>
         <div class="qbreak"><div><span>Equipamentos</span><b>{hero_equip}</b></div><div><span>Consumíveis</span><b>{consum_qtd}</b></div><div class="tt"><span>Total</span><b>{g_vqtd}</b></div></div></div>
       <div><div class="label">Em aberto</div><div class="v money" style="color:var(--ink2)">{br(g_ab)}</div><div class="qty"><b>{g_abqtd}</b> negociações</div></div>
-      <div><div class="label">Falta p/ meta</div><div class="v money">{br(g_falta)}</div></div>
+      <div><div class="label">Falta p/ meta</div>{falta_top}</div>
     </div>
     <div class="label">% da meta já batido</div>
     <div class="barline"><div class="bar lg {barcls(hg_p)}" style="flex:1"><span style="width:{min(hg_p,100):.0f}%"></span></div><div class="pct">{hg_p:.0f}%</div></div>
@@ -585,7 +592,7 @@ html = f"""<!DOCTYPE html>
     </table>
   </div>
 
-  <div class="note">Gerado automaticamente da planilha em {agora}.</div>
+  <div class="note2"><span>Gerado automaticamente da planilha em {agora}.</span><span>Falta p/ meta REAL: <b>{br(falta_real)}</b></span></div>
 </div>{SCRIPT}</body></html>"""
 
 with open(OUT, "w", encoding="utf-8") as f:
