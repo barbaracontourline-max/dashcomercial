@@ -362,7 +362,7 @@ fin_rows = (
     f'<tr class="hl"><td>Valor de Venda</td><td>{br(E_["VENDA"])}</td><td>{br(P_["VENDA"])}</td><td class="tot">{br(G_["VENDA"])}</td></tr>'
     + frow("Valor RD", "RD", "VENDA", "(do valor de venda)")
     + frow("Entrada / Cartão", "ENT", "VENDA", "(do valor de venda)")
-    + frow("Santander", "SANT", "VENDA", "(do valor de venda)")
+    + frow("Santander/Glória", "SANT", "VENDA", "(do valor de venda)")
     + frow("A Receber", "AREC", "ENT", "(pendente entradas)")
 )
 
@@ -376,7 +376,7 @@ def ind_card(nome, grp):
             f'<div class="ind-pct">{pctf(p,1)}</div>'
             f'<div class="ind-status">{status}</div></div>')
 ind_block = (f'<div class="label" style="margin:22px 0 10px">Entrada recebida · meta mínima 30% '
-             f'<span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">(Entrada/Cartão + Santander ÷ Valor de Venda)</span></div>'
+             f'<span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">(Entrada/Cartão + Santander/Glória ÷ Valor de Venda)</span></div>'
              f'<div class="indgrid">{ind_card("Já entrou", E_)}{ind_card("Pendente", P_)}{ind_card("Total", G_)}</div>')
 
 eq_rows = ('<div class="eqrow eqhdr"><span class="nm">Equipamento</span>'
@@ -573,9 +573,9 @@ html = f"""<!DOCTYPE html>
   <div class="section-title" id="financeiro">Financeiro · Negociações <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">({ne+npd} negócios)</span></div>
   <div class="card">
     <div class="metrics" style="margin-bottom:8px">
-      <div class="m"><div class="label">Já recebido</div><div class="v money green">{br(recebido)}</div><div style="color:var(--green);font-size:13px;font-weight:700;margin-top:2px">{pctf(pct_receb,1)}</div><div class="qty">Entrada + Santander − A Receber</div></div>
+      <div class="m"><div class="label">Já recebido</div><div class="v money green">{br(recebido)}</div><div style="color:var(--green);font-size:13px;font-weight:700;margin-top:2px">{pctf(pct_receb,1)}</div><div class="qty">Entrada + Santander/Glória − A Receber</div></div>
       <div class="m"><div class="label">A receber</div><div class="v money" style="color:#d97706">{br(G_["AREC"])}</div><div style="color:#d97706;font-size:13px;font-weight:700;margin-top:2px">{pctf(pct_arec,1)}</div><div class="qty">cliente ainda não pagou</div></div>
-      <div class="m"><div class="label">Total</div><div class="v money">{br(total_cash)}</div><div style="color:var(--ink2);font-size:13px;font-weight:700;margin-top:2px">100%</div><div class="qty">Entrada/Cartão + Santander</div></div>
+      <div class="m"><div class="label">Total</div><div class="v money">{br(total_cash)}</div><div style="color:var(--ink2);font-size:13px;font-weight:700;margin-top:2px">100%</div><div class="qty">Entrada/Cartão + Santander/Glória</div></div>
     </div>
     {ind_block}
     <div class="label" style="margin:22px 0 10px">Detalhamento por negócio</div>
