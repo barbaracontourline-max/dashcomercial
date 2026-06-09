@@ -9,6 +9,8 @@ FILE_ID = os.environ.get("SHEET_ID", "").strip()  # vem do segredo do GitHub (na
 if not FILE_ID:
     raise SystemExit("Defina o segredo SHEET_ID em Settings > Secrets and variables > Actions.")
 URL = f"https://docs.google.com/spreadsheets/d/{FILE_ID}/export?format=xlsx"
+MONTH = os.environ.get("MONTH", "MAIO").upper()
+MONTH_LABEL = {"MAIO":"Maio","JUNHO":"Junho"}.get(MONTH, MONTH.title())
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "painel-comercial-prototipo.html")
 
@@ -19,6 +21,12 @@ def pctf(x, d=0):
     return f"{x:.{d}f}".replace(".", ",") + "%"
 def num(v): return isinstance(v, (int, float))
 def gv(v): return float(v) if num(v) else 0.0
+def _isdeal(ws, r):
+    """Linha real de negocio: VALOR DE VENDA numerico + CLIENTE preenchido.
+    Robusto a erros de formula na coluna # (ex: #VALUE! que antes derrubava a contagem)."""
+    q = ws.cell(r, 17).value
+    b = ws.cell(r, 2).value
+    return isinstance(q, (int, float)) and isinstance(b, str) and b.strip() != ""
 
 # ---------- baixar dados ----------
 import time
@@ -85,7 +93,8 @@ def ger_key(s):
     return None
 # Metas dos vendedores embutidas (fallback p/ quando rodar na nuvem sem o VENDAS 2026.xlsx local).
 # Atualizar quando as metas mudarem de mês/valor.
-METAS_EMBED = {
+METAS_EMBED_ALL = {
+"MAIO": {
     'BRANDINA VIDAL': ('JÉSSICA', 975000.0, 'Brandina Vidal'),
     'CLAUDIA JARDIM': ('JÉSSICA', 975000.0, 'Cláudia Jardim'),
     'DIANA CARVALHO': ('JÉSSICA', 0.0, 'Diana Carvalho'),
@@ -109,7 +118,34 @@ METAS_EMBED = {
     'JAIRO SALES': ('NIKOLE', 805000.0, 'Jairo Sales'),
     'KARINA GRANDINI': ('NIKOLE', 1350000.0, 'Karina Grandini'),
     'MIRELLA CAMARGO': ('NIKOLE', 805000.0, 'Mirella Camargo'),
+},
+"JUNHO": {
+    'BRANDINA VIDAL': ('JÉSSICA', 966500.0, 'Brandina Vidal'),
+    'CLAUDIA JARDIM': ('JÉSSICA', 483000.0, 'Cláudia Jardim'),
+    'DIANA CARVALHO': ('JÉSSICA', 0.0, 'Diana Carvalho'),
+    'FLAVIANA CECILIA': ('JÉSSICA', 966500.0, 'Flaviana Cecília'),
+    'GABRIEL LISBOA': ('JÉSSICA', 676750.0, 'Gabriel Lisboa'),
+    'GRAZIANE ALVES': ('JÉSSICA', 400000.0, 'Graziane Alves'),
+    'JESSICA CARVALHO': ('JÉSSICA', 966500.0, 'Jéssica Carvalho'),
+    'LUIS FERNANDO': ('JÉSSICA', 676750.0, 'Luis Fernando'),
+    'RAFAELA CALDEIRA': ('JÉSSICA', 966500.0, 'Rafaela Caldeira'),
+    'THIAGO MENDES': ('JÉSSICA', 966500.0, 'Thiago Mendes'),
+    'REVEND. | REPRESENTANTE': ('JÉSSICA', 966500.0, 'Revend. | Representante'),
+    'FABIANO ROSESTOLATO': ('XAVIER', 950000.0, 'Fabiano Rosestolato'),
+    'FELIPE GONTIJO': ('XAVIER', 900000.0, 'Felipe Gontijo'),
+    'JULIANA ALMEIDA': ('XAVIER', 700000.0, 'Juliana Almeida'),
+    'PAULA RAPOSO': ('XAVIER', 950000.0, 'Paula Raposo'),
+    'RAQUEL BURNS': ('XAVIER', 700000.0, 'Raquel Burns'),
+    'VAGO': ('XAVIER', 449300.0, 'Vago'),
+    'AMANDA RIBEIRO': ('NIKOLE', 750000.0, 'Amanda Ribeiro'),
+    'FILIPE ANJOS': ('NIKOLE', 830000.0, 'Filipe Anjos'),
+    'JAIRO SALES': ('NIKOLE', 830000.0, 'Jairo Sales'),
+    'KARINA GRANDINI': ('NIKOLE', 1200000.0, 'Karina Grandini'),
+    'MARIANA LOPES': ('NIKOLE', 400000.0, 'Mariana Lopes'),
+    'MIRELLA CAMARGO': ('NIKOLE', 900000.0, 'Mirella Camargo'),
+},
 }
+METAS_EMBED = METAS_EMBED_ALL.get(MONTH, {})
 import shutil, tempfile
 VENDAS_PATH = os.path.join(os.path.dirname(HERE), "VENDAS 2026.xlsx")
 metas_v = {}
@@ -123,7 +159,7 @@ try:
         for r in range(1, ws.max_row + 1):
             b = ws.cell(r, 2).value; cc = ws.cell(r, 3).value
             if str(b).strip() == "✅" and cc: atual = str(cc).strip()
-            elif str(b).strip().upper() == "MAIO" and atual:
+            elif str(b).strip().upper() == MONTH and atual:
                 d = ws.cell(r, 4).value
                 metas_v[_norm(atual)] = (gs, gv(d), atual); atual = None
 except Exception as _e:
@@ -147,7 +183,7 @@ revend_meta = metas_v.get(REVEND_KEY, (None, 0.0, None))[1]
 det = {"JÉSSICA":{}, "NIKOLE":{}, "XAVIER":{}}
 for r in range(3, N.max_row + 1):
     a = N.cell(r,1).value; q = N.cell(r,17).value
-    if not (num(a) and num(q)): continue
+    if not _isdeal(N, r): continue
     vd = N.cell(r,13).value; gk = ger_key(N.cell(r,14).value)
     if not vd or not gk: continue
     vn = _norm(vd)
@@ -189,7 +225,7 @@ def br0(x):
 eqsim = {}
 for r in range(3, N.max_row + 1):
     a = N.cell(r,1).value; q = N.cell(r,17).value
-    if not (num(a) and num(q)): continue
+    if not _isdeal(N, r): continue
     if not _hasop(N.cell(r,7).value): continue   # só fechado com OP
     eq = N.cell(r,5).value; sim = N.cell(r,16).value
     if not eq: continue
@@ -204,7 +240,7 @@ _NG = wb["NEGOCIAÇÕES"]
 g_vend = g_ab = 0.0; g_vqtd = g_abqtd = 0
 for _r in range(3, _NG.max_row + 1):
     _a = _NG.cell(_r,1).value; _q = _NG.cell(_r,17).value
-    if not (num(_a) and num(_q)): continue
+    if not _isdeal(_NG, _r): continue
     _op = _NG.cell(_r,7).value
     if isinstance(_op, datetime.datetime) or (isinstance(_op, str) and _op.strip() not in ("","N/A","N/T")):
         g_vend += _q; g_vqtd += 1
@@ -238,7 +274,7 @@ G_, E_, P_ = nb(), nb(), nb()
 ne = npd = 0
 for r in range(3, N.max_row+1):
     a = N.cell(r,1).value; q = N.cell(r,17).value; op = N.cell(r,7).value
-    if not (num(a) and num(q)): continue
+    if not _isdeal(N, r): continue
     has = isinstance(op, datetime.datetime) or (isinstance(op,str) and op.strip() not in ("","N/A","N/T"))
     t = E_ if has else P_
     if has: ne += 1
@@ -399,6 +435,13 @@ eq_rows += (f'<div class="eqrow eqtot"><span class="nm">TOTAL</span>'
 
 hg_p = g_vend/g_meta*100 if g_meta else 0
 agora = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-3))).strftime("%d/%m/%Y %H:%M")
+# chips de mes (Junho fica em /dashcomercial/, Maio fica em /dashcomercial/maio/)
+if MONTH == "JUNHO":
+    href_maio, href_junho = "maio/", "./"
+else:  # MAIO
+    href_maio, href_junho = "./", "../"
+cls_maio  = "m-chip active" if MONTH == "MAIO"  else "m-chip"
+cls_junho = "m-chip active" if MONTH == "JUNHO" else "m-chip"
 if falta_proj > 0:
     falta_top = f'<div class="v money">{br(falta_proj)}</div><div class="qty">já liberado + em aberto</div>'
 else:
@@ -410,7 +453,7 @@ navbar = (f'<nav class="navbar">'
           f'<details class="nav-dd"><summary>Por fabricante</summary><div class="dd-menu">{_fab_links}</div></details>'
           f'<details class="nav-dd"><summary>Por gestor</summary><div class="dd-menu">{_ger_links}</div></details>'
           f'<a class="nav-chip" href="#equipamentos">Por equipamento</a>'
-          f'<a class="nav-chip" href="#fichas">Fichas de Maio</a>'
+          f'<a class="nav-chip" href="#fichas">Fichas de {MONTH_LABEL}</a>'
           f'<a class="nav-chip" href="#financeiro">Financeiro</a>'
           f'</nav>')
 SCRIPT = r"""<script>
@@ -431,6 +474,10 @@ CSS = r"""<style>
   .topbar .sub{font-size:12px;color:rgba(255,255,255,.72);margin-top:2px}
   .live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#fff;font-weight:600}
   .live .dot{width:7px;height:7px;border-radius:50%;background:#6BE8A0;box-shadow:0 0 0 3px rgba(107,232,160,.25)}
+  .month-pick{display:flex;gap:6px;margin-left:4px;padding-left:14px;border-left:1px solid rgba(255,255,255,.28)}
+  .m-chip{font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;color:rgba(255,255,255,.85);text-decoration:none;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18);transition:.15s}
+  .m-chip:hover{background:rgba(255,255,255,.18);color:#fff}
+  .m-chip.active{background:#fff;color:var(--brand);cursor:default;border-color:#fff}
   .label{font-size:11px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--muted)}
   .money{font-variant-numeric:tabular-nums}
   .qty{font-size:11.5px;color:var(--muted);font-weight:600;margin-top:3px;font-variant-numeric:tabular-nums}
@@ -544,7 +591,7 @@ html = f"""<!DOCTYPE html>
 {CSS}
 </head><body><div class="wrap">
   <div class="topbar">
-    <div class="brand"><img class="logo" src="Imagens/contourline-branca.png" alt="Contourline"><div class="tw"><h1>Painel Comercial</h1><div class="sub">atualizado em {agora}</div></div></div>
+    <div class="brand"><img class="logo" src="Imagens/contourline-branca.png" alt="Contourline"><div class="tw"><h1>Painel Comercial</h1><div class="sub">atualizado em {agora}</div></div><div class="month-pick"><a href="{href_maio}" class="{cls_maio}">Maio</a><a href="{href_junho}" class="{cls_junho}">Junho</a></div></div>
     <span class="live"><span class="dot"></span> ao vivo</span>
   </div>
 
@@ -573,7 +620,7 @@ html = f"""<!DOCTYPE html>
   <div class="gstack">{''.join(gest_card(G, i) for i,G in enumerate(gestores))}
   </div>
 
-  <div class="section-title" id="fichas">Fichas · Maio <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">({fichas_tot_qtd} fichas · {br(fichas_tot_val)})</span></div>
+  <div class="section-title" id="fichas">Fichas · {MONTH_LABEL} <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">({fichas_tot_qtd} fichas · {br(fichas_tot_val)})</span></div>
   <div class="card funnel">
       {fichas_rows}</div>
 

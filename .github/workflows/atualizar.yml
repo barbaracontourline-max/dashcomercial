@@ -28,15 +28,26 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - name: Gerar painel
+      - name: Gerar painel JUNHO (raiz)
         env:
-          SHEET_ID: ${{ secrets.SHEET_ID }}
+          SHEET_ID: ${{ secrets.SHEET_ID_JUNHO }}
+          MONTH: JUNHO
         run: python gerar_painel.py
-      - name: Montar site
+      - name: Empacotar Junho na raiz do site
         run: |
           mkdir -p site/Imagens
           cp painel-comercial-prototipo.html site/index.html
           cp Imagens/* site/Imagens/
+      - name: Gerar painel MAIO (subpasta)
+        env:
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          MONTH: MAIO
+        run: python gerar_painel.py
+      - name: Empacotar Maio em /maio/
+        run: |
+          mkdir -p site/maio/Imagens
+          cp painel-comercial-prototipo.html site/maio/index.html
+          cp Imagens/* site/maio/Imagens/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
