@@ -472,6 +472,15 @@ navbar = (f'<nav class="navbar">'
           f'<a class="nav-chip" href="#financeiro">Financeiro</a>'
           f'</nav>')
 SCRIPT = r"""<script>
+// Anti-cache 1: auto-reload a cada 14 min com cache-buster (sincroniza c/ o despertador)
+setTimeout(function(){
+  var u = new URL(window.location.href);
+  u.searchParams.set('_', Date.now());
+  window.location.replace(u.toString());
+}, 14*60*1000);
+// Anti-cache 2: mata bfcache (back/forward) — recarrega quando a aba volta do cache
+window.addEventListener('pageshow', function(e){ if(e.persisted) location.reload(); });
+// dropdowns do menu
 document.querySelectorAll('.dd-menu a').forEach(function(a){a.addEventListener('click',function(){document.querySelectorAll('.nav-dd[open]').forEach(function(d){d.removeAttribute('open');});});});
 document.addEventListener('click',function(e){document.querySelectorAll('.nav-dd[open]').forEach(function(d){if(!d.contains(e.target)){d.removeAttribute('open');}});});
 </script>"""
@@ -602,6 +611,9 @@ CSS = r"""<style>
 
 html = f"""<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Painel Comercial — Contourline</title>
 {CSS}
 </head><body><div class="wrap">
