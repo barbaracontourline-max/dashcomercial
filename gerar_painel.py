@@ -44,6 +44,21 @@ R = wb["RESUMÃO"]
 def c(col, row):
     return R[f"{col}{row}"].value
 
+# ---------- corte ZELOTECH ----------
+# A secao "VENDAS ZELOTECH" no fim da NEGOCIACOES nao conta pra meta.
+# Achamos a linha do cabecalho e ignoramos tudo dali pra baixo.
+def _zelotech_cut(ws):
+    for r in range(1, ws.max_row + 1):
+        for col in range(1, 8):
+            v = ws.cell(r, col).value
+            if isinstance(v, str) and "VENDAS ZELOTECH" in v.upper():
+                return r
+    return ws.max_row + 1
+_N = wb["NEGOCIAÇÕES"]
+ZELOTECH_CUT = _zelotech_cut(_N)
+_z_rows = max(0, _N.max_row - ZELOTECH_CUT + 1) if ZELOTECH_CUT <= _N.max_row else 0
+print(f"Corte ZELOTECH: linha {ZELOTECH_CUT} (ignorando {_z_rows} linhas a partir dali)")
+
 # ---------- EQUIP / LINHAS ----------
 consum_qtd = int(gv(c("D", 4)))            # consumiveis vendidos (so existem em BH Nao Med)
 consum_val_vend = gv(c("B", 4)); consum_val_ab = gv(c("B", 6)); consum_ab_qtd = int(gv(c("D", 6)))
@@ -181,7 +196,7 @@ revend_meta = metas_v.get(REVEND_KEY, (None, 0.0, None))[1]
 
 # vendido/pendente agrupado pelo GERENTE DO NEGÓCIO (reconcilia com o total do gestor)
 det = {"JÉSSICA":{}, "NIKOLE":{}, "XAVIER":{}}
-for r in range(3, N.max_row + 1):
+for r in range(3, min(N.max_row + 1, ZELOTECH_CUT)):
     a = N.cell(r,1).value; q = N.cell(r,17).value
     if not _isdeal(N, r): continue
     vd = N.cell(r,13).value; gk = ger_key(N.cell(r,14).value)
@@ -223,7 +238,7 @@ def br0(x):
 
 # simulador por equipamento (modelo)
 eqsim = {}
-for r in range(3, N.max_row + 1):
+for r in range(3, min(N.max_row + 1, ZELOTECH_CUT)):
     a = N.cell(r,1).value; q = N.cell(r,17).value
     if not _isdeal(N, r): continue
     if not _hasop(N.cell(r,7).value): continue   # só fechado com OP
@@ -238,7 +253,7 @@ eqlist = sorted(([e, a[0], a[1], a[2]] for e,a in eqsim.items()), key=lambda x:-
 g_meta = gv(c("G",27))
 _NG = wb["NEGOCIAÇÕES"]
 g_vend = g_ab = 0.0; g_vqtd = g_abqtd = 0
-for _r in range(3, _NG.max_row + 1):
+for _r in range(3, min(_NG.max_row + 1, ZELOTECH_CUT)):
     _a = _NG.cell(_r,1).value; _q = _NG.cell(_r,17).value
     if not _isdeal(_NG, _r): continue
     _op = _NG.cell(_r,7).value
@@ -272,7 +287,7 @@ fcols = {"SIM":16,"VENDA":17,"RD":18,"ENT":19,"SANT":20,"AREC":21}
 def nb(): return {k:0.0 for k in fcols}
 G_, E_, P_ = nb(), nb(), nb()
 ne = npd = 0
-for r in range(3, N.max_row+1):
+for r in range(3, min(N.max_row + 1, ZELOTECH_CUT)):
     a = N.cell(r,1).value; q = N.cell(r,17).value; op = N.cell(r,7).value
     if not _isdeal(N, r): continue
     has = isinstance(op, datetime.datetime) or (isinstance(op,str) and op.strip() not in ("","N/A","N/T"))
