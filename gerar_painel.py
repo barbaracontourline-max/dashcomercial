@@ -550,14 +550,15 @@ def ind_card(nome, ind_val, grp_venda):
     return (f'<div class="ind {cls}"><div class="label">{nome}</div>'
             f'<div class="ind-pct">{pctf(p,1)}</div>'
             f'<div class="ind-status">{status}</div></div>')
-# Indicador 30%: varia por layout
-#   Maio: (ENT+SANT)/VENDA — formula ORIGINAL preservada (mes fechado, intocavel)
-#   Junho: Recebido/VENDA — mostra % que ja entrou efetivamente
+# Indicador 30%: MESMA logica de Maio (Total / VENDA, sem subtrair AREC).
+#   Maio: Total = ENT+SANT. Indicador = Total/VENDA
+#   Junho: Total = VALOR A VISTA. Indicador = Total/VENDA
+# Sem duplicacao: em Junho usamos VAV sozinho (NAO somamos os meios pra nao duplicar
+# com os valores detalhados em SANT/GLOR/CART/PIX).
+ind_e, ind_p, ind_g = total_E, total_P, total_cash
 if NEG_LAYOUT == "novo":
-    ind_e, ind_p, ind_g = recebido_E, recebido_P, recebido
-    ind_label = "Entrada − A Receber ÷ Valor de Venda"
+    ind_label = "Valor à Vista ÷ Valor de Venda"
 else:
-    ind_e, ind_p, ind_g = total_E, total_P, total_cash
     ind_label = "Entrada/Cartão + Santander/Glória ÷ Valor de Venda"
 ind_block = (f'<div class="label" style="margin:22px 0 10px">Entrada recebida · meta mínima 30% '
              f'<span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">({ind_label})</span></div>'
