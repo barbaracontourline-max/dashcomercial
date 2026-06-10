@@ -541,18 +541,27 @@ else:  # antigo (Maio)
         + frow("A Receber", "AREC", "ENT", "(pendente entradas)")
     )
 
-def ind_card(nome, grp_receb, grp_venda):
-    p = grp_receb/grp_venda*100 if grp_venda else 0
+def ind_card(nome, ind_val, grp_venda):
+    p = ind_val/grp_venda*100 if grp_venda else 0
     ok = p >= 30
     cls = "ok" if ok else "alert"
     status = "✓ Acima de 30%" if ok else "⚠ Abaixo de 30%"
     return (f'<div class="ind {cls}"><div class="label">{nome}</div>'
             f'<div class="ind-pct">{pctf(p,1)}</div>'
             f'<div class="ind-status">{status}</div></div>')
-ind_label = "Entrada − A Receber ÷ Valor de Venda" if NEG_LAYOUT == "novo" else "Entrada/Cartão + Santander/Glória ÷ Valor de Venda"
+# Pro caminho ANTIGO (Maio) o indicador usa a formula ORIGINAL: (ENT + SANT) / VENDA — SEM subtrair AREC.
+# Pro caminho NOVO (Junho+) usa (ENTRADA − A RECEBER) / VENDA.
+if NEG_LAYOUT == "novo":
+    ind_e, ind_p, ind_g = recebido_E, recebido_P, recebido
+    ind_label = "Entrada − A Receber ÷ Valor de Venda"
+else:
+    ind_e = E_["ENT"] + E_["SANT"]
+    ind_p = P_["ENT"] + P_["SANT"]
+    ind_g = G_["ENT"] + G_["SANT"]
+    ind_label = "Entrada/Cartão + Santander/Glória ÷ Valor de Venda"
 ind_block = (f'<div class="label" style="margin:22px 0 10px">Entrada recebida · meta mínima 30% '
              f'<span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">({ind_label})</span></div>'
-             f'<div class="indgrid">{ind_card("Já entrou", recebido_E, E_["VENDA"])}{ind_card("Pendente", recebido_P, P_["VENDA"])}{ind_card("Total", recebido, G_["VENDA"])}</div>')
+             f'<div class="indgrid">{ind_card("Já entrou", ind_e, E_["VENDA"])}{ind_card("Pendente", ind_p, P_["VENDA"])}{ind_card("Total", ind_g, G_["VENDA"])}</div>')
 
 eq_rows = ('<div class="eqrow eqhdr"><span class="nm">Equipamento</span>'
            '<span class="r">Nº</span><span class="r">Simulador</span><span class="r">Valor de Venda</span><span class="r">% meta</span></div>')
