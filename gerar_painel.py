@@ -232,6 +232,12 @@ for vn,(gsheet,meta,disp) in metas_v.items():
 for gk in vend_by: vend_by[gk].sort(key=lambda v:-v["op"])
 for G in gestores:
     G["vends"] = vend_by.get(ger_key(G["nome"]), [])
+# Em aberto do gestor = soma dos pendentes dos vendedores (NEGOCIACOES eh a verdade,
+# RESUMAO as vezes nao bate por fórmula com filtro extra).
+for G in gestores:
+    vs = G.get("vends", [])
+    G["ab"] = sum(v["pe"] for v in vs)
+    G["abqtd"] = sum(v["pq"] for v in vs)
 def br0(x):
     try: return "R$ " + f"{float(x):,.0f}".replace(",", ".")
     except Exception: return "R$ 0"
