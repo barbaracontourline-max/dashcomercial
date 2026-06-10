@@ -29,25 +29,51 @@ def _isdeal(ws, r):
     b = ws.cell(r, 2).value
     return isinstance(q, (int, float)) and isinstance(b, str) and b.strip() != ""
 
-# Mapa de colunas da aba NEGOCIACOES (layout 2026-06-10+ apos Babi:
-# inseriu CONSUMIVEIS em F, INDICACAO em P, separou SANTANDER/GLORIA e ENTRADA/CARTAO/PIX)
-# Cols 1-5 e 9-12 nao mudaram. Cols 6-8 e 13+ shiftaram.
-COL_CONSUM = 6   # F  CONSUMIVEIS    (NOVA)
-COL_PEDIDO = 7   # G  PEDIDO VENDA   (era col 6)
-COL_OP     = 8   # H  DATA DA OP     (era col 7)
-COL_PLANO  = 13  # M  PLANO          (NOVA posicao)
-COL_VEND   = 14  # N  VENDEDOR       (era col 13)
-COL_GER    = 15  # O  GERENTE        (era col 14)
-COL_INDIC  = 16  # P  INDICACAO      (NOVA)
-COL_SIM    = 17  # Q  SIMULADOR      (era col 16)
-COL_VENDA  = 18  # R  VALOR DE VENDA (era col 17)
-COL_RD     = 19  # S  VALOR RD       (era col 18)
-COL_ENTR   = 20  # T  ENTRADA        (era col 19)
-COL_SANT   = 21  # U  SANTANDER      (era col 20)
-COL_GLOR   = 22  # V  GLORIA         (NOVA)
-COL_CART   = 23  # W  CARTAO         (NOVA)
-COL_PIX    = 24  # X  PIX OU TED     (NOVA)
-COL_AREC   = 25  # Y  A RECEBER      (era col 21)
+# Detector AUTOMATICO de colunas da NEGOCIACOES (layout difere entre Maio antigo e Junho novo).
+# Le a linha 2 (cabecalho) e mapeia nomes -> col. Tambem deduz o tipo de layout:
+#   antigo (Maio): tem "ENTRADA/CARTAO" e "SANTANDER/GLORIA" combinadas
+#   novo  (Junho+): tem "ENTRADA" e 4 meios (SANT, GLOR, CART, PIX) separados
+# A CHAMADA fica logo apos `wb = ...` la embaixo; aqui so define as funcoes.
+import unicodedata as _ud
+def _hnorm(s):
+    if not isinstance(s, str): return ""
+    s = "".join(ch for ch in _ud.normalize("NFD", s) if _ud.category(ch) != "Mn")
+    return " ".join(s.strip().upper().split()).replace("/", " / ")
+def detect_neg_layout(ws):
+    H = {}
+    for col in range(1, 40):
+        v = ws.cell(2, col).value
+        if v: H[col] = _hnorm(v)
+    def find(*aliases):
+        for col, h in H.items():
+            for a in aliases:
+                if h == _hnorm(a): return col
+        return None
+    C = {}
+    C["OP"]    = find("DATA DA OP")
+    C["VEND"]  = find("VENDEDOR")
+    C["GER"]   = find("GERENTE")
+    C["SIM"]   = find("SIMULADOR")
+    C["VENDA"] = find("VALOR DE VENDA")
+    C["RD"]    = find("VALOR RD")
+    C["AREC"]  = find("A RECEBER")
+    C["ENT_COMBO"]  = find("ENTRADA/CARTAO", "ENTRADA / CARTAO")
+    C["SANT_COMBO"] = find("SANTANDER/GLORIA", "SANTANDER / GLORIA")
+    C["ENTR"] = find("ENTRADA")
+    C["SANT"] = find("SANTANDER")
+    C["GLOR"] = find("GLORIA")
+    C["CART"] = find("CARTAO DE CREDITO", "CARTAO")
+    C["PIX"]  = find("PIX OU TED", "PIX/TED", "PIX")
+    if C["ENTR"] and C["SANT"] and C["GLOR"] and C["CART"] and C["PIX"]:
+        layout = "novo"
+    elif C["ENT_COMBO"] and C["SANT_COMBO"]:
+        layout = "antigo"
+    else:
+        layout = "desconhecido"
+    return C, layout
+# Valores SAO definidos apos `wb` ser carregado (mais abaixo no script).
+NEG_COLS = None; NEG_LAYOUT = None
+COL_OP = COL_VEND = COL_GER = COL_SIM = COL_VENDA = COL_RD = COL_AREC = None
 
 # ---------- baixar dados ----------
 import time
@@ -64,6 +90,17 @@ wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True)
 R = wb["RESUMÃO"]
 def c(col, row):
     return R[f"{col}{row}"].value
+
+# Detecta colunas da NEGOCIACOES PELOS NOMES (linha 2). Diferente em Maio (antigo) vs Junho (novo).
+NEG_COLS, NEG_LAYOUT = detect_neg_layout(wb["NEGOCIAÇÕES"])
+print(f"Layout NEGOCIACOES: {NEG_LAYOUT}")
+COL_OP    = NEG_COLS["OP"]
+COL_VEND  = NEG_COLS["VEND"]
+COL_GER   = NEG_COLS["GER"]
+COL_SIM   = NEG_COLS["SIM"]
+COL_VENDA = NEG_COLS["VENDA"]
+COL_RD    = NEG_COLS["RD"]
+COL_AREC  = NEG_COLS["AREC"]
 
 # ---------- corte ZELOTECH ----------
 # A secao "VENDAS ZELOTECH" no fim da NEGOCIACOES nao conta pra meta.
@@ -309,24 +346,31 @@ def fcolor(lab):
     return "c-neg"
 
 # ---------- FINANCEIRO (NEGOCIAÇÕES) ----------
-# Regra Babi 2026-06-10 (revisada):
-#   ENTRADA (T) = TOTAL prometido = SANT+GLOR+CART+PIX+AREC
-#   SANT/GLOR/CART/PIX = quanto JA entrou por cada meio
-#   AREC = parcela da entrada ainda pendente
-#   Recebido (caixa) = SANT+GLOR+CART+PIX (NAO somar ENTRADA junto, eh duplicar)
-#   VALOR RD = informativo (financiamento parceiro, nao cai no caixa)
+# fgroups adaptado ao layout detectado:
+#   antigo (Maio): ENT (Entrada/Cartao) + SANT (Sant/Gloria) + AREC
+#   novo  (Junho+): ENTR + SANT + GLOR + CART + PIX + AREC
 N = wb["NEGOCIAÇÕES"]
-fgroups = {
-    "SIM":   [COL_SIM],
-    "VENDA": [COL_VENDA],
-    "RD":    [COL_RD],
-    "ENTR":  [COL_ENTR],   # total prometido da entrada
-    "SANT":  [COL_SANT],
-    "GLOR":  [COL_GLOR],
-    "CART":  [COL_CART],
-    "PIX":   [COL_PIX],
-    "AREC":  [COL_AREC],
-}
+if NEG_LAYOUT == "novo":
+    fgroups = {
+        "SIM":   [NEG_COLS["SIM"]],
+        "VENDA": [NEG_COLS["VENDA"]],
+        "RD":    [NEG_COLS["RD"]],
+        "ENTR":  [NEG_COLS["ENTR"]],
+        "SANT":  [NEG_COLS["SANT"]],
+        "GLOR":  [NEG_COLS["GLOR"]],
+        "CART":  [NEG_COLS["CART"]],
+        "PIX":   [NEG_COLS["PIX"]],
+        "AREC":  [NEG_COLS["AREC"]],
+    }
+else:  # antigo (Maio)
+    fgroups = {
+        "SIM":   [NEG_COLS["SIM"]],
+        "VENDA": [NEG_COLS["VENDA"]],
+        "RD":    [NEG_COLS["RD"]],
+        "ENT":   [NEG_COLS["ENT_COMBO"]],
+        "SANT":  [NEG_COLS["SANT_COMBO"]],
+        "AREC":  [NEG_COLS["AREC"]],
+    }
 def nb(): return {k:0.0 for k in fgroups}
 G_, E_, P_ = nb(), nb(), nb()
 ne = npd = 0
@@ -361,12 +405,19 @@ def frow_calc(label, ev, pv, gv_, base_key, sub):
         cells += f'<td{cls}>{br(v)}{pcell}</td>'
     bsub = f'<span class="bs">{sub}</span>' if sub else ''
     return f'<tr><td>{label}{bsub}</td>{cells}</tr>'
-# Recebido = ENTRADA - A RECEBER (definicao Babi: AREC eh a fonte da verdade pro pendente).
-# Os 4 meios (SANT/GLOR/CART/PIX) sao detalhamento informativo na tabela.
-recebido_E = E_["ENTR"] - E_["AREC"]
-recebido_P = P_["ENTR"] - P_["AREC"]
-recebido   = G_["ENTR"] - G_["AREC"]
-total_cash = G_["ENTR"]   # total prometido da entrada
+# Calculo do recebido depende do layout:
+#   antigo (Maio): total = ENT + SANT; recebido = total - AREC
+#   novo  (Junho+): total = ENTR; recebido = ENTR - AREC (AREC ja esta dentro de ENTR)
+if NEG_LAYOUT == "novo":
+    recebido_E = E_["ENTR"] - E_["AREC"]
+    recebido_P = P_["ENTR"] - P_["AREC"]
+    recebido   = G_["ENTR"] - G_["AREC"]
+    total_cash = G_["ENTR"]
+else:  # antigo
+    recebido_E = (E_["ENT"] + E_["SANT"]) - E_["AREC"]
+    recebido_P = (P_["ENT"] + P_["SANT"]) - P_["AREC"]
+    recebido   = (G_["ENT"] + G_["SANT"]) - G_["AREC"]
+    total_cash = G_["ENT"] + G_["SANT"]
 pct_receb = recebido/total_cash*100 if total_cash else 0
 pct_arec = G_["AREC"]/total_cash*100 if total_cash else 0
 
@@ -467,18 +518,28 @@ for lab, val, qt in fichas:
                     f'<div class="val"><b class="money">{br(val)}</b> · {qt}</div>'
                     f'<div class="fpct">{w:.0f}%</div></div>\n      ')
 
-fin_rows = (
-    f'<tr><td>Simulador</td><td>{br(E_["SIM"])}</td><td>{br(P_["SIM"])}</td><td class="tot">{br(G_["SIM"])}</td></tr>'
-    f'<tr class="hl"><td>Valor de Venda</td><td>{br(E_["VENDA"])}</td><td>{br(P_["VENDA"])}</td><td class="tot">{br(G_["VENDA"])}</td></tr>'
-    + frow("Valor RD", "RD", "VENDA", "(financiamento parceiro · não cai no caixa)")
-    + frow("Entrada (total)", "ENTR", "VENDA", "(do valor de venda)")
-    + frow_calc("Já recebido", recebido_E, recebido_P, recebido, "ENTR", "(Entrada − A Receber)")
-    + frow("&nbsp;&nbsp;Santander", "SANT", "ENTR", "")
-    + frow("&nbsp;&nbsp;Glória", "GLOR", "ENTR", "")
-    + frow("&nbsp;&nbsp;Cartão de Crédito", "CART", "ENTR", "")
-    + frow("&nbsp;&nbsp;PIX ou TED", "PIX", "ENTR", "")
-    + frow("A Receber", "AREC", "ENTR", "(pendente da entrada)")
-)
+if NEG_LAYOUT == "novo":
+    fin_rows = (
+        f'<tr><td>Simulador</td><td>{br(E_["SIM"])}</td><td>{br(P_["SIM"])}</td><td class="tot">{br(G_["SIM"])}</td></tr>'
+        f'<tr class="hl"><td>Valor de Venda</td><td>{br(E_["VENDA"])}</td><td>{br(P_["VENDA"])}</td><td class="tot">{br(G_["VENDA"])}</td></tr>'
+        + frow("Valor RD", "RD", "VENDA", "(financiamento parceiro · não cai no caixa)")
+        + frow("Entrada (total)", "ENTR", "VENDA", "(do valor de venda)")
+        + frow_calc("Já recebido", recebido_E, recebido_P, recebido, "ENTR", "(Entrada − A Receber)")
+        + frow("&nbsp;&nbsp;Santander", "SANT", "ENTR", "")
+        + frow("&nbsp;&nbsp;Glória", "GLOR", "ENTR", "")
+        + frow("&nbsp;&nbsp;Cartão de Crédito", "CART", "ENTR", "")
+        + frow("&nbsp;&nbsp;PIX ou TED", "PIX", "ENTR", "")
+        + frow("A Receber", "AREC", "ENTR", "(pendente da entrada)")
+    )
+else:  # antigo (Maio)
+    fin_rows = (
+        f'<tr><td>Simulador</td><td>{br(E_["SIM"])}</td><td>{br(P_["SIM"])}</td><td class="tot">{br(G_["SIM"])}</td></tr>'
+        f'<tr class="hl"><td>Valor de Venda</td><td>{br(E_["VENDA"])}</td><td>{br(P_["VENDA"])}</td><td class="tot">{br(G_["VENDA"])}</td></tr>'
+        + frow("Valor RD", "RD", "VENDA", "(do valor de venda)")
+        + frow("Entrada / Cartão", "ENT", "VENDA", "(do valor de venda)")
+        + frow("Santander/Glória", "SANT", "VENDA", "(do valor de venda)")
+        + frow("A Receber", "AREC", "ENT", "(pendente entradas)")
+    )
 
 def ind_card(nome, grp_receb, grp_venda):
     p = grp_receb/grp_venda*100 if grp_venda else 0
@@ -488,8 +549,9 @@ def ind_card(nome, grp_receb, grp_venda):
     return (f'<div class="ind {cls}"><div class="label">{nome}</div>'
             f'<div class="ind-pct">{pctf(p,1)}</div>'
             f'<div class="ind-status">{status}</div></div>')
+ind_label = "Entrada − A Receber ÷ Valor de Venda" if NEG_LAYOUT == "novo" else "Entrada/Cartão + Santander/Glória ÷ Valor de Venda"
 ind_block = (f'<div class="label" style="margin:22px 0 10px">Entrada recebida · meta mínima 30% '
-             f'<span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">(Entrada − A Receber ÷ Valor de Venda)</span></div>'
+             f'<span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">({ind_label})</span></div>'
              f'<div class="indgrid">{ind_card("Já entrou", recebido_E, E_["VENDA"])}{ind_card("Pendente", recebido_P, P_["VENDA"])}{ind_card("Total", recebido, G_["VENDA"])}</div>')
 
 eq_rows = ('<div class="eqrow eqhdr"><span class="nm">Equipamento</span>'
@@ -715,9 +777,9 @@ html = f"""<!DOCTYPE html>
   <div class="section-title" id="financeiro">Financeiro · Negociações <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">({ne+npd} negócios)</span></div>
   <div class="card">
     <div class="metrics" style="margin-bottom:8px">
-      <div class="m"><div class="label">Já recebido</div><div class="v money green">{br(recebido)}</div><div style="color:var(--green);font-size:13px;font-weight:700;margin-top:2px">{pctf(pct_receb,1)}</div><div class="qty">Entrada − A Receber</div></div>
+      <div class="m"><div class="label">Já recebido</div><div class="v money green">{br(recebido)}</div><div style="color:var(--green);font-size:13px;font-weight:700;margin-top:2px">{pctf(pct_receb,1)}</div><div class="qty">{'Entrada − A Receber' if NEG_LAYOUT == 'novo' else 'Entrada + Santander/Glória − A Receber'}</div></div>
       <div class="m"><div class="label">A receber</div><div class="v money" style="color:#d97706">{br(G_["AREC"])}</div><div style="color:#d97706;font-size:13px;font-weight:700;margin-top:2px">{pctf(pct_arec,1)}</div><div class="qty">cliente ainda não pagou</div></div>
-      <div class="m"><div class="label">Total da entrada</div><div class="v money">{br(total_cash)}</div><div style="color:var(--ink2);font-size:13px;font-weight:700;margin-top:2px">100%</div><div class="qty">prometido pra Contourline</div></div>
+      <div class="m"><div class="label">{'Total da entrada' if NEG_LAYOUT == 'novo' else 'Total'}</div><div class="v money">{br(total_cash)}</div><div style="color:var(--ink2);font-size:13px;font-weight:700;margin-top:2px">100%</div><div class="qty">{'prometido pra Contourline' if NEG_LAYOUT == 'novo' else 'Entrada/Cartão + Santander/Glória'}</div></div>
     </div>
     {ind_block}
     <div class="label" style="margin:22px 0 10px">Detalhamento por negócio</div>
