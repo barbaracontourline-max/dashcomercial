@@ -59,7 +59,7 @@ def detect_neg_layout(ws):
     C["AREC"]  = find("A RECEBER")
     C["ENT_COMBO"]  = find("ENTRADA/CARTAO", "ENTRADA / CARTAO")
     C["SANT_COMBO"] = find("SANTANDER/GLORIA", "SANTANDER / GLORIA")
-    C["ENTR"] = find("ENTRADA")
+    C["ENTR"] = find("VALOR A VISTA", "VALOR À VISTA", "ENTRADA")
     C["SANT"] = find("SANTANDER")
     C["GLOR"] = find("GLORIA")
     C["CART"] = find("CARTAO DE CREDITO", "CARTAO")
