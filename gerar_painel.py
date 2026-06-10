@@ -23,10 +23,31 @@ def num(v): return isinstance(v, (int, float))
 def gv(v): return float(v) if num(v) else 0.0
 def _isdeal(ws, r):
     """Linha real de negocio: VALOR DE VENDA numerico + CLIENTE preenchido.
-    Robusto a erros de formula na coluna # (ex: #VALUE! que antes derrubava a contagem)."""
-    q = ws.cell(r, 17).value
+    Robusto a erros de formula na coluna # (ex: #VALUE! que antes derrubava a contagem).
+    Layout 2026-06-10+: INDICACAO em P(16), SIMULADOR em Q(17), VALOR DE VENDA em R(18)."""
+    q = ws.cell(r, COL_VENDA).value
     b = ws.cell(r, 2).value
     return isinstance(q, (int, float)) and isinstance(b, str) and b.strip() != ""
+
+# Mapa de colunas da aba NEGOCIACOES (layout 2026-06-10+ apos Babi:
+# inseriu CONSUMIVEIS em F, INDICACAO em P, separou SANTANDER/GLORIA e ENTRADA/CARTAO/PIX)
+# Cols 1-5 e 9-12 nao mudaram. Cols 6-8 e 13+ shiftaram.
+COL_CONSUM = 6   # F  CONSUMIVEIS    (NOVA)
+COL_PEDIDO = 7   # G  PEDIDO VENDA   (era col 6)
+COL_OP     = 8   # H  DATA DA OP     (era col 7)
+COL_PLANO  = 13  # M  PLANO          (NOVA posicao)
+COL_VEND   = 14  # N  VENDEDOR       (era col 13)
+COL_GER    = 15  # O  GERENTE        (era col 14)
+COL_INDIC  = 16  # P  INDICACAO      (NOVA)
+COL_SIM    = 17  # Q  SIMULADOR      (era col 16)
+COL_VENDA  = 18  # R  VALOR DE VENDA (era col 17)
+COL_RD     = 19  # S  VALOR RD       (era col 18)
+COL_ENTR   = 20  # T  ENTRADA        (era col 19)
+COL_SANT   = 21  # U  SANTANDER      (era col 20)
+COL_GLOR   = 22  # V  GLORIA         (NOVA)
+COL_CART   = 23  # W  CARTAO         (NOVA)
+COL_PIX    = 24  # X  PIX OU TED     (NOVA)
+COL_AREC   = 25  # Y  A RECEBER      (era col 21)
 
 # ---------- baixar dados ----------
 import time
@@ -197,13 +218,13 @@ revend_meta = metas_v.get(REVEND_KEY, (None, 0.0, None))[1]
 # vendido/pendente agrupado pelo GERENTE DO NEGÓCIO (reconcilia com o total do gestor)
 det = {"JÉSSICA":{}, "NIKOLE":{}, "XAVIER":{}}
 for r in range(3, min(N.max_row + 1, ZELOTECH_CUT)):
-    a = N.cell(r,1).value; q = N.cell(r,17).value
+    a = N.cell(r,1).value; q = N.cell(r,COL_VENDA).value
     if not _isdeal(N, r): continue
-    vd = N.cell(r,13).value; gk = ger_key(N.cell(r,14).value)
+    vd = N.cell(r,COL_VEND).value; gk = ger_key(N.cell(r,COL_GER).value)
     if not vd or not gk: continue
     vn = _norm(vd)
     d = det[gk].setdefault(vn, {"op":0.0,"pe":0.0,"oq":0,"pq":0,"raw":str(vd).strip()})
-    if _hasop(N.cell(r,7).value): d["op"]+=q; d["oq"]+=1
+    if _hasop(N.cell(r,COL_OP).value): d["op"]+=q; d["oq"]+=1
     else: d["pe"]+=q; d["pq"]+=1
 
 def _row(nome, meta, d): return {"nome":nome,"meta":meta,"op":d["op"],"pe":d["pe"],"oq":d["oq"],"pq":d["pq"]}
@@ -245,10 +266,10 @@ def br0(x):
 # simulador por equipamento (modelo)
 eqsim = {}
 for r in range(3, min(N.max_row + 1, ZELOTECH_CUT)):
-    a = N.cell(r,1).value; q = N.cell(r,17).value
+    a = N.cell(r,1).value; q = N.cell(r,COL_VENDA).value
     if not _isdeal(N, r): continue
-    if not _hasop(N.cell(r,7).value): continue   # só fechado com OP
-    eq = N.cell(r,5).value; sim = N.cell(r,16).value
+    if not _hasop(N.cell(r,COL_OP).value): continue   # só fechado com OP
+    eq = N.cell(r,5).value; sim = N.cell(r,COL_SIM).value
     if not eq: continue
     e = str(eq).strip()
     d = eqsim.setdefault(e, [0.0, 0.0, 0])
@@ -260,9 +281,9 @@ g_meta = gv(c("G",27))
 _NG = wb["NEGOCIAÇÕES"]
 g_vend = g_ab = 0.0; g_vqtd = g_abqtd = 0
 for _r in range(3, min(_NG.max_row + 1, ZELOTECH_CUT)):
-    _a = _NG.cell(_r,1).value; _q = _NG.cell(_r,17).value
+    _a = _NG.cell(_r,1).value; _q = _NG.cell(_r,COL_VENDA).value
     if not _isdeal(_NG, _r): continue
-    _op = _NG.cell(_r,7).value
+    _op = _NG.cell(_r,COL_OP).value
     if isinstance(_op, datetime.datetime) or (isinstance(_op, str) and _op.strip() not in ("","N/A","N/T")):
         g_vend += _q; g_vqtd += 1
     else:
@@ -288,21 +309,33 @@ def fcolor(lab):
     return "c-neg"
 
 # ---------- FINANCEIRO (NEGOCIAÇÕES) ----------
+# Grupos do painel (rule: segue a regra antiga apos Babi separar as colunas):
+#   ENT  "Entrada/Cartao"   = ENTRADA + CARTAO + PIX
+#   SANT "Santander/Gloria" = SANTANDER + GLORIA
+# Mantem display dos rotulos antigos do painel.
 N = wb["NEGOCIAÇÕES"]
-fcols = {"SIM":16,"VENDA":17,"RD":18,"ENT":19,"SANT":20,"AREC":21}
-def nb(): return {k:0.0 for k in fcols}
+fgroups = {
+    "SIM":   [COL_SIM],
+    "VENDA": [COL_VENDA],
+    "RD":    [COL_RD],
+    "ENT":   [COL_ENTR, COL_CART, COL_PIX],
+    "SANT":  [COL_SANT, COL_GLOR],
+    "AREC":  [COL_AREC],
+}
+def nb(): return {k:0.0 for k in fgroups}
 G_, E_, P_ = nb(), nb(), nb()
 ne = npd = 0
 for r in range(3, min(N.max_row + 1, ZELOTECH_CUT)):
-    a = N.cell(r,1).value; q = N.cell(r,17).value; op = N.cell(r,7).value
+    a = N.cell(r,1).value; op = N.cell(r,COL_OP).value
     if not _isdeal(N, r): continue
     has = isinstance(op, datetime.datetime) or (isinstance(op,str) and op.strip() not in ("","N/A","N/T"))
     t = E_ if has else P_
     if has: ne += 1
     else: npd += 1
-    for k,col in fcols.items():
-        v = N.cell(r,col).value
-        if num(v): G_[k]+=v; t[k]+=v
+    for k, cols in fgroups.items():
+        for col in cols:
+            v = N.cell(r,col).value
+            if num(v): G_[k]+=v; t[k]+=v
 def fpc(a,b): return pctf(a/b*100,2) if b else "0%"
 def frow(label, key, base_key, sub):
     cells = ""
