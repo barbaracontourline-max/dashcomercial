@@ -554,15 +554,12 @@ def ind_card(nome, ind_val, grp_venda):
 #   Junho: Total = VALOR A VISTA. Indicador = Total/VENDA
 # Sem duplicacao: em Junho usamos VAV sozinho (NAO somamos os meios pra nao duplicar
 # com os valores detalhados em SANT/GLOR/CART/PIX).
-# Indicador 30%:
-#   Maio (antigo): Total / VENDA (ENT+SANT representavam total prometido; AREC era subset)
-#   Junho (novo): Recebido / VENDA (SANT+GLOR+CART+PIX = so o que ja entrou no caixa;
-#                AREC e separado — NAO inclui pq inflaria o indicador)
+# Indicador 30%: MESMA logica de Maio (Total / VENDA) — Babi escolheu Opcao A em 2026-06-10.
+# Total inclui AREC (representa "% do valor de venda que vai como entrada, nao como financiamento RD").
+ind_e, ind_p, ind_g = total_E, total_P, total_cash
 if NEG_LAYOUT == "novo":
-    ind_e, ind_p, ind_g = recebido_E, recebido_P, recebido
-    ind_label = "Santander + Glória + Cartão + PIX ÷ Valor de Venda"
+    ind_label = "Santander + Glória + Cartão + PIX + A Receber ÷ Valor de Venda"
 else:
-    ind_e, ind_p, ind_g = total_E, total_P, total_cash
     ind_label = "Entrada/Cartão + Santander/Glória ÷ Valor de Venda"
 ind_block = (f'<div class="label" style="margin:22px 0 10px">Entrada recebida · meta mínima 30% '
              f'<span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">({ind_label})</span></div>'
