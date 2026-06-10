@@ -405,19 +405,19 @@ def frow_calc(label, ev, pv, gv_, base_key, sub):
         cells += f'<td{cls}>{br(v)}{pcell}</td>'
     bsub = f'<span class="bs">{sub}</span>' if sub else ''
     return f'<tr><td>{label}{bsub}</td>{cells}</tr>'
-# Calculo do recebido depende do layout:
-#   antigo (Maio): total = ENT + SANT; recebido = total - AREC
-#   novo  (Junho+): total = ENTR; recebido = ENTR - AREC (AREC ja esta dentro de ENTR)
+# Calculo do recebido segue MESMA logica em Maio e Junho (Babi 2026-06-10):
+#   Total = soma de TODOS os meios da entrada (sem AREC)
+#   Recebido = Total - AREC
+#   Em Maio: 2 meios (Entrada/Cartao + Santander/Gloria)
+#   Em Junho: 5 meios (Entrada + Santander + Gloria + Cartao + PIX)
 if NEG_LAYOUT == "novo":
-    recebido_E = E_["ENTR"] - E_["AREC"]
-    recebido_P = P_["ENTR"] - P_["AREC"]
-    recebido   = G_["ENTR"] - G_["AREC"]
-    total_cash = G_["ENTR"]
-else:  # antigo
-    recebido_E = (E_["ENT"] + E_["SANT"]) - E_["AREC"]
-    recebido_P = (P_["ENT"] + P_["SANT"]) - P_["AREC"]
-    recebido   = (G_["ENT"] + G_["SANT"]) - G_["AREC"]
-    total_cash = G_["ENT"] + G_["SANT"]
+    def _tot(g): return g["ENTR"] + g["SANT"] + g["GLOR"] + g["CART"] + g["PIX"]
+else:  # antigo (Maio)
+    def _tot(g): return g["ENT"] + g["SANT"]
+total_E = _tot(E_); total_P = _tot(P_); total_cash = _tot(G_)
+recebido_E = total_E - E_["AREC"]
+recebido_P = total_P - P_["AREC"]
+recebido   = total_cash - G_["AREC"]
 pct_receb = recebido/total_cash*100 if total_cash else 0
 pct_arec = G_["AREC"]/total_cash*100 if total_cash else 0
 
@@ -522,16 +522,16 @@ if NEG_LAYOUT == "novo":
     fin_rows = (
         f'<tr><td>Simulador</td><td>{br(E_["SIM"])}</td><td>{br(P_["SIM"])}</td><td class="tot">{br(G_["SIM"])}</td></tr>'
         f'<tr class="hl"><td>Valor de Venda</td><td>{br(E_["VENDA"])}</td><td>{br(P_["VENDA"])}</td><td class="tot">{br(G_["VENDA"])}</td></tr>'
-        + frow("Valor RD", "RD", "VENDA", "(financiamento parceiro · não cai no caixa)")
-        + frow("Entrada (total)", "ENTR", "VENDA", "(do valor de venda)")
-        + frow_calc("Já recebido", recebido_E, recebido_P, recebido, "ENTR", "(Entrada − A Receber)")
-        + frow("&nbsp;&nbsp;Santander", "SANT", "ENTR", "")
-        + frow("&nbsp;&nbsp;Glória", "GLOR", "ENTR", "")
-        + frow("&nbsp;&nbsp;Cartão de Crédito", "CART", "ENTR", "")
-        + frow("&nbsp;&nbsp;PIX ou TED", "PIX", "ENTR", "")
-        + frow("A Receber", "AREC", "ENTR", "(pendente da entrada)")
+        + frow("Valor RD", "RD", "VENDA", "(do valor de venda)")
+        + frow("Entrada", "ENTR", "VENDA", "(do valor de venda)")
+        + frow("Santander", "SANT", "VENDA", "(do valor de venda)")
+        + frow("Glória", "GLOR", "VENDA", "(do valor de venda)")
+        + frow("Cartão de Crédito", "CART", "VENDA", "(do valor de venda)")
+        + frow("PIX ou TED", "PIX", "VENDA", "(do valor de venda)")
+        + frow_calc("Total da Entrada", total_E, total_P, total_cash, "VENDA", "(soma das 5 acima)")
+        + frow("A Receber", "AREC", "VENDA", "(pendente entradas)")
     )
-else:  # antigo (Maio)
+else:  # antigo (Maio) — intacto
     fin_rows = (
         f'<tr><td>Simulador</td><td>{br(E_["SIM"])}</td><td>{br(P_["SIM"])}</td><td class="tot">{br(G_["SIM"])}</td></tr>'
         f'<tr class="hl"><td>Valor de Venda</td><td>{br(E_["VENDA"])}</td><td>{br(P_["VENDA"])}</td><td class="tot">{br(G_["VENDA"])}</td></tr>'
@@ -549,15 +549,11 @@ def ind_card(nome, ind_val, grp_venda):
     return (f'<div class="ind {cls}"><div class="label">{nome}</div>'
             f'<div class="ind-pct">{pctf(p,1)}</div>'
             f'<div class="ind-status">{status}</div></div>')
-# Pro caminho ANTIGO (Maio) o indicador usa a formula ORIGINAL: (ENT + SANT) / VENDA — SEM subtrair AREC.
-# Pro caminho NOVO (Junho+) usa (ENTRADA − A RECEBER) / VENDA.
+# Indicador 30%: usa SOMA de todos os meios / VENDA (mesma logica em Maio e Junho).
+ind_e, ind_p, ind_g = total_E, total_P, total_cash
 if NEG_LAYOUT == "novo":
-    ind_e, ind_p, ind_g = recebido_E, recebido_P, recebido
-    ind_label = "Entrada − A Receber ÷ Valor de Venda"
+    ind_label = "Entrada + Santander + Glória + Cartão + PIX ÷ Valor de Venda"
 else:
-    ind_e = E_["ENT"] + E_["SANT"]
-    ind_p = P_["ENT"] + P_["SANT"]
-    ind_g = G_["ENT"] + G_["SANT"]
     ind_label = "Entrada/Cartão + Santander/Glória ÷ Valor de Venda"
 ind_block = (f'<div class="label" style="margin:22px 0 10px">Entrada recebida · meta mínima 30% '
              f'<span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">({ind_label})</span></div>'
@@ -786,9 +782,9 @@ html = f"""<!DOCTYPE html>
   <div class="section-title" id="financeiro">Financeiro · Negociações <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">({ne+npd} negócios)</span></div>
   <div class="card">
     <div class="metrics" style="margin-bottom:8px">
-      <div class="m"><div class="label">Já recebido</div><div class="v money green">{br(recebido)}</div><div style="color:var(--green);font-size:13px;font-weight:700;margin-top:2px">{pctf(pct_receb,1)}</div><div class="qty">{'Entrada − A Receber' if NEG_LAYOUT == 'novo' else 'Entrada + Santander/Glória − A Receber'}</div></div>
+      <div class="m"><div class="label">Já recebido</div><div class="v money green">{br(recebido)}</div><div style="color:var(--green);font-size:13px;font-weight:700;margin-top:2px">{pctf(pct_receb,1)}</div><div class="qty">{'Entrada + Sant + Glória + Cartão + PIX − A Receber' if NEG_LAYOUT == 'novo' else 'Entrada + Santander/Glória − A Receber'}</div></div>
       <div class="m"><div class="label">A receber</div><div class="v money" style="color:#d97706">{br(G_["AREC"])}</div><div style="color:#d97706;font-size:13px;font-weight:700;margin-top:2px">{pctf(pct_arec,1)}</div><div class="qty">cliente ainda não pagou</div></div>
-      <div class="m"><div class="label">{'Total da entrada' if NEG_LAYOUT == 'novo' else 'Total'}</div><div class="v money">{br(total_cash)}</div><div style="color:var(--ink2);font-size:13px;font-weight:700;margin-top:2px">100%</div><div class="qty">{'prometido pra Contourline' if NEG_LAYOUT == 'novo' else 'Entrada/Cartão + Santander/Glória'}</div></div>
+      <div class="m"><div class="label">Total</div><div class="v money">{br(total_cash)}</div><div style="color:var(--ink2);font-size:13px;font-weight:700;margin-top:2px">100%</div><div class="qty">{'Entrada + Sant + Glória + Cartão + PIX' if NEG_LAYOUT == 'novo' else 'Entrada/Cartão + Santander/Glória'}</div></div>
     </div>
     {ind_block}
     <div class="label" style="margin:22px 0 10px">Detalhamento por negócio</div>
